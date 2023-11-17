@@ -85,7 +85,7 @@ internal class Bot
             await DeleteDB(Guild, User);
         await using var dataSource = NpgsqlDataSource.Create(ParseString(url));
         await using var conn = await dataSource.OpenConnectionAsync();
-        using var comm = new NpgsqlCommand($"INSERT INTO data (guild, guild_user{(channel is null ? "" : ", channel")}{(rate is null ? "" : ", rate")}) VALUES ({(long)Guild.Id}, {(long)User.Id}{(channel is null ? "" : $", {channel.Id}")}{(rate is null ? "" : $", {rate}")})", conn);
+        using var comm = new NpgsqlCommand($"INSERT INTO data (guild, guild_user{(channel is null ? "" : ", channel")}{(rate is null ? "" : ", rate")}) VALUES ({(long)Guild.Id}, {(long)User}{(channel is null ? "" : $", {channel.Id}")}{(rate is null ? "" : $", {rate}")})", conn);
         await comm.ExecuteNonQueryAsync();
         Log($"Posting settings: guild: {Guild.Id}; auth: {User}");
     }
