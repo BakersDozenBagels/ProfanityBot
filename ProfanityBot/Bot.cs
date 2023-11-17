@@ -124,7 +124,7 @@ internal class Bot
 
         var to = _responses[new(guild.Id, message.Author.Id)].channel ?? (SocketTextChannel)message.Channel!;
 
-        if (message.Content == "" && message.Embeds.Count == 0)
+        if (message.Content == "" && message.Embeds.Count == 0 && message.Attachments.Count == 0)
         {
             await to.SendMessageAsync("I found a message to reply to, but I can't see what it is. Are you sure I have permission to view message contents?");
             return;
