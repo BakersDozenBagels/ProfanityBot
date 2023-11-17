@@ -76,7 +76,7 @@ internal class Bot
         return $"Host={m.Groups[3].Value}; Username={m.Groups[1].Value}; Password={m.Groups[2].Value}; SSL Mode=Disable;";
     }
 
-    private static async Task PostDB(IGuild Guild, IUser User, SocketTextChannel? channel, float? rate, bool update)
+    private static async Task PostDB(IGuild Guild, ulong User, SocketTextChannel? channel, float? rate, bool update)
     {
         var url = Environment.GetEnvironmentVariable("DATABASE_URL");
         if (url is null)
@@ -87,10 +87,10 @@ internal class Bot
         await using var conn = await dataSource.OpenConnectionAsync();
         using var comm = new NpgsqlCommand($"INSERT INTO data (guild, guild_user{(channel is null ? "" : ", channel")}{(rate is null ? "" : ", rate")}) VALUES ({(long)Guild.Id}, {(long)User.Id}{(channel is null ? "" : $", {channel.Id}")}{(rate is null ? "" : $", {rate}")})", conn);
         await comm.ExecuteNonQueryAsync();
-        Log($"Posting settings: guild: {Guild.Id}; auth: {User.Id}");
+        Log($"Posting settings: guild: {Guild.Id}; auth: {User}");
     }
 
-    private static async Task DeleteDB(IGuild Guild, IUser? User = null)
+    private static async Task DeleteDB(IGuild Guild, ulong? User = null)
     {
         var url = Environment.GetEnvironmentVariable("DATABASE_URL");
         if (url is null)
@@ -98,7 +98,7 @@ internal class Bot
         await using var dataSource = NpgsqlDataSource.Create(ParseString(url));
         await using var conn = dataSource.CreateConnection();
         await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand("DELETE FROM data WHERE guild = $1" + (User is null ? "" : $" AND guild_user = {(long)User.Id}"), conn)
+        await using var cmd = new NpgsqlCommand("DELETE FROM data WHERE guild = $1" + (User is null ? "" : $" AND guild_user = {(long)User}"), conn)
         {
             Parameters =
             {
@@ -281,7 +281,7 @@ internal class Bot
     private async Task HandleRegisterCommand(SocketSlashCommand command)
     {
         var guild = _client.GetGuild(command.GuildId!.Value);
-        var user = (IUser)command.Data.Options.First().Value;
+        var user = ParseUser((string)command.Data.Options.First().Value);
         var channel = (IChannel?)command.Data.Options.FirstOrDefault(op => op.Name == "channel")?.Value;
         var rate = (double?)command.Data.Options.FirstOrDefault(op => op.Name == "rate")?.Value;
         float? trueRate = null;
@@ -299,19 +299,22 @@ internal class Bot
             }
             trueRate = rate is null ? null : (float)rate * 0.01f;
         }
-        if (_responses.ContainsKey(new(guild.Id, user.Id)))
+        if (_responses.ContainsKey(new(guild.Id, user)))
         {
-            _responses[new(guild.Id, user.Id)] = ((SocketTextChannel?)channel, trueRate);
+            _responses[new(guild.Id, user)] = ((SocketTextChannel?)channel, trueRate);
             await PostDB(guild, user, (SocketTextChannel?)channel, trueRate, true);
         }
         else
         {
-            _responses.Add(new(guild.Id, user.Id), ((SocketTextChannel?)channel, trueRate));
+            _responses.Add(new(guild.Id, user), ((SocketTextChannel?)channel, trueRate));
             await PostDB(guild, user, (SocketTextChannel?)channel, trueRate, false);
         }
 
-        await command.RespondAsync($"User {user.Mention} will be replied to {(channel == null ? "where they send their messages" : $"in <#{channel.Id}>")}.", ephemeral: true);
+        await command.RespondAsync($"User <@{user}> will be replied to {(channel == null ? "where they send their messages" : $"in <#{channel.Id}>")}.", ephemeral: true);
     }
+
+    private static readonly Regex _userRegex = new(@"(<@)?(\d+)(?(1)>|)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.ECMAScript);
+    private static ulong ParseUser(string value) => ulong.Parse(_userRegex.Match(value).Groups[2].Value);
 
     private async Task HandleDeregisterCommand(SocketSlashCommand command)
     {
@@ -336,7 +339,7 @@ internal class Bot
         var command1 = new SlashCommandBuilder()
             .WithName("reply-to-user")
             .WithDescription("Sets the bot to reply to a given user.")
-            .AddOption("user", ApplicationCommandOptionType.Mentionable, "The users to reply to", isRequired: true)
+            .AddOption("user", ApplicationCommandOptionType.String, "The users to reply to", isRequired: true)
             .AddOption("channel", ApplicationCommandOptionType.Channel, "The channel to reply in", isRequired: false)
             .AddOption("rate", ApplicationCommandOptionType.Number, "The percentage of words to replace", isRequired: false)
             .WithDMPermission(false)
